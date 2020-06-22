@@ -3,24 +3,26 @@ import tornado.websocket
 import tornado.ioloop
 import struct 
 import math 
-import random
-
+import random 
+import time
 #
 # 1 Spawn dot 
 # 2 Remove dot 
-# 3 do smth
-#
-#
+# 3 Who hit a circle
+# 4 Write points of each player
+# 5 Remove player 
 #
 n=1
 dotCoords={'X':0,'Y':0}
-taks={"newPlayer":0,"spawnDot":1,"removeDot":2}
+task={"newPlayer":0,"spawnDot":1,"removeDot":2,"Hit":3,"addPoints":4,
+        "removePlayer":5,"showWinner":6,}
 Players={}
-
+Points={}
 class GameHandler(tornado.websocket.WebSocketHandler):
     def open(self):
         global n
         Players[self]=n
+        Points[n]=0
         self.write_message(str(n))
         if n==1:
             msg=spawnDot()
@@ -29,13 +31,19 @@ class GameHandler(tornado.websocket.WebSocketHandler):
             msg= spawnDot(dotCoords['X'],dotCoords['Y'])
             self.write_message(msg,True)
         n=n+1
+        for i in range(len(Points)):
+            msg = addPoints(i)
+            for con in Players:
+                con.write_message(msg,True)
         print("New Connection")
         
-        
-
     def on_close(self):
         global n
+        del Points[Players[self]]
         Players.pop(self)
+        msg = removePlayer(n)
+        for con in Players:
+            con.write_message(msg,True)
         n=n-1
         print("Connection Removed")
         
@@ -50,16 +58,46 @@ class GameHandler(tornado.websocket.WebSocketHandler):
             Y=message[2]+message[3]
             Len=countLen(X,Y)
             if dotHit(X,Y) == True:
-                print("Player"+str(Players[self]))
                 msg = removeDot()
                 for con in Players:
                     con.write_message(msg,True)
-                msg = spawnDot()
+                Points[Players[self]]+=1
+                for i in range(len(Points)):
+                    msg = addPoints(i)
+                    for con in Players:
+                        con.write_message(msg,True)
+                msg = Hit(Players[self])
                 for con in Players:
                     con.write_message(msg,True)
+                msg = spawnDot()
+                time.sleep(0.5)
+                for con in Players:
+                    con.write_message(msg,True)
+                if Points[Players[self]]>=20:
+                    msg = showWinner(Players[self])
+                    for con in Players:
+                        con.write_message(msg,True)
+                    for P in Points:
+                        Points[P]=0
+
     def check_origin(self,origin):
         print("Origin: ",origin)
         return True
+
+def showWinner(Winner):
+    msg = struct.pack('hh',task["showWinner"],Winner)
+    return msg
+def removePlayer(n):
+    msg = struct.pack('hh',task["removePlayer"],n)
+    return msg
+
+def addPoints(Player):
+    msg =struct.pack('hhh',task["addPoints"],Player,Points[Player+1])
+    return msg
+
+def Hit(Player):
+    msg = struct.pack('hh',task["Hit"],Player)
+    return msg
 
 
 def spawnDot(x=-1,y=-1):
@@ -68,14 +106,14 @@ def spawnDot(x=-1,y=-1):
         y=random.randint(200,1000)
         newDot(x,y)
     
-    msg = struct.pack('hhh',taks["spawnDot"],x,y)
+    msg = struct.pack('hhh',task["spawnDot"],x,y)
     return msg
 
 def removeDot():
     global dotCoords
     x= dotCoords["X"]
     y=dotCoords["Y"]
-    msg = struct.pack('hhh',taks["removeDot"],x,y)
+    msg = struct.pack('hhh',task["removeDot"],x,y)
     return msg
 
 def dotHit(x,y):
@@ -93,7 +131,6 @@ def newDot(x,y):
     global dotCoords
     dotCoords['X']=x
     dotCoords['Y']=y
-    print("New dot:\n"+str(dotCoords))
 
 class Loader(tornado.web.RequestHandler):
     def get(self):
