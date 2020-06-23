@@ -18,12 +18,12 @@ task={"newPlayer":0,"spawnDot":1,"removeDot":2,"Hit":3,"addPoints":4,
         "removePlayer":5,"showWinner":6,}
 Players={}
 Points={}
+Left={}
 class GameHandler(tornado.websocket.WebSocketHandler):
     def open(self):
         global n
         Players[self]=n
         Points[n]=0
-        self.write_message(str(n))
         if n==1:
             msg=spawnDot()
             self.write_message(msg,True)
@@ -33,18 +33,13 @@ class GameHandler(tornado.websocket.WebSocketHandler):
         n=n+1
         for i in range(len(Points)):
             msg = addPoints(i)
-            for con in Players:
-                con.write_message(msg,True)
+            sendToAll(msg)
         print("New Connection")
         
     def on_close(self):
-        global n
-        del Points[Players[self]]
-        Players.pop(self)
-        msg = removePlayer(n)
-        for con in Players:
-            con.write_message(msg,True)
-        n=n-1
+        Left[self]=Players[self]
+        msg = removePlayer(len(Players)-len(Left))
+        sendToAll(msg)
         print("Connection Removed")
         
     
@@ -59,30 +54,34 @@ class GameHandler(tornado.websocket.WebSocketHandler):
             Len=countLen(X,Y)
             if dotHit(X,Y) == True:
                 msg = removeDot()
-                for con in Players:
-                    con.write_message(msg,True)
+                sendToAll(msg)
                 Points[Players[self]]+=1
                 for i in range(len(Points)):
                     msg = addPoints(i)
-                    for con in Players:
-                        con.write_message(msg,True)
+                    sendToAll(msg)
                 msg = Hit(Players[self])
-                for con in Players:
-                    con.write_message(msg,True)
+                sendToAll(msg)
                 msg = spawnDot()
-                time.sleep(0.5)
-                for con in Players:
-                    con.write_message(msg,True)
+                time.sleep(1)
+                sendToAll(msg)
                 if Points[Players[self]]>=20:
                     msg = showWinner(Players[self])
-                    for con in Players:
-                        con.write_message(msg,True)
+                    sendToAll(msg)
                     for P in Points:
                         Points[P]=0
 
     def check_origin(self,origin):
         print("Origin: ",origin)
         return True
+
+def sendToAll(msg):
+    global Players,Left
+    for con in Players:
+        if con in Left:
+            continue
+        else:
+            con.write_message(msg,True)
+
 
 def showWinner(Winner):
     msg = struct.pack('hh',task["showWinner"],Winner)
@@ -92,7 +91,8 @@ def removePlayer(n):
     return msg
 
 def addPoints(Player):
-    msg =struct.pack('hhh',task["addPoints"],Player,Points[Player+1])
+    global Players,Left
+    msg =struct.pack('hhhh',task["addPoints"],Player,Points[Player+1],Player %(len(Players)-len(Left)))
     return msg
 
 def Hit(Player):
@@ -102,7 +102,7 @@ def Hit(Player):
 
 def spawnDot(x=-1,y=-1):
     if x==-1 and y==-1:
-        x=random.randint(50,1000)
+        x=random.randint(400,1500)
         y=random.randint(200,1000)
         newDot(x,y)
     
