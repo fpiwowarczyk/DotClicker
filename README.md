@@ -1,2 +1,2 @@
 # WebSocket-Game
-My first game using websocket and tornado 
+Prototype for browser multiplayer game using websocket. 
